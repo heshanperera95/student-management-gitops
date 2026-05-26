@@ -4,7 +4,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # In-memory storage (data resets on pod restart — fine for testing)
 students = {}
