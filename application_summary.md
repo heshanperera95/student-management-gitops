@@ -5,6 +5,7 @@
 A containerised Student Management System deployed on Google Kubernetes Engine (GKE).
 It allows users to add, view, edit, and delete student records through a web interface.
 The frontend and backend run as separate containers/pods and communicate over an internal Kubernetes network.
+Deployments are managed via GitOps using ArgoCD — any manifest change pushed to GitHub is automatically deployed to the cluster.
 
 ---
 
@@ -13,7 +14,7 @@ The frontend and backend run as separate containers/pods and communicate over an
 | Component | Version |
 |---|---|
 | Frontend | 1.1.0 |
-| Backend | 1.1.0 |
+| Backend | 1.2.0 |
 
 ---
 
@@ -29,6 +30,8 @@ The frontend and backend run as separate containers/pods and communicate over an
 | Container runtime | Docker | Multi-stage builds |
 | Orchestration | Kubernetes (GKE) | Google Kubernetes Engine |
 | Container registry | Google Container Registry (GCR) | gcr.io/emerald-water-452417-h1 |
+| GitOps | ArgoCD | Auto-syncs from GitHub on manifest changes |
+| Source control | GitHub | https://github.com/heshanperera95/student-management-gitops |
 
 ---
 
@@ -65,13 +68,14 @@ gke cluster/
 │   ├── tsconfig.json
 │   ├── Dockerfile              ← Node 20 build + nginx 1.27 serve
 │   └── .dockerignore
-├── k8s_manifests/
+├── k8s_manifests/              ← Watched by ArgoCD
 │   ├── namespace.yaml
 │   ├── backend-deployment.yaml
 │   ├── backend-service.yaml
 │   ├── frontend-deployment.yaml
 │   └── frontend-service.yaml
 ├── docker-compose.yml          ← Local development setup
+├── argocd-app.yaml             ← ArgoCD Application definition
 └── application_summary.md      ← This file
 ```
 
@@ -85,7 +89,7 @@ gke cluster/
 | Method | Endpoint | Description | Request Body | Response |
 |---|---|---|---|---|
 | GET | `/health` | Health check | — | `{"status": "healthy"}` |
-| GET | `/version` | Backend version | — | `{"version": "1.1.0"}` |
+| GET | `/version` | Backend version | — | `{"version": "1.2.0"}` |
 | GET | `/students` | Get all students | — | Array of student objects |
 | GET | `/students/:id` | Get one student | — | Student object or 404 |
 | POST | `/students` | Create a student | `{id, name, email, phone}` | Created student or 400/409 |
@@ -157,7 +161,7 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 | Field | Value |
 |---|---|
 | Name | `backend` |
-| Image | `gcr.io/emerald-water-452417-h1/student-backend:latest` |
+| Image | `gcr.io/emerald-water-452417-h1/student-backend:1.2.0` |
 | Replicas | 1 |
 | Container port | 5000 |
 | CPU request/limit | 100m / 300m |
@@ -211,6 +215,21 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 
 ---
 
+## ArgoCD
+
+| Field | Value |
+|---|---|
+| Namespace | `argocd` |
+| UI Access | `https://34.27.178.30:31762` or `https://35.193.78.229:31762` |
+| Username | `admin` |
+| Application name | `student-management` |
+| Watched repo | `https://github.com/heshanperera95/student-management-gitops.git` |
+| Watched path | `k8s_manifests/` |
+| Watched branch | `main` |
+| Sync policy | Automated (prune + selfHeal enabled) |
+
+---
+
 ## Local Development
 
 Uses Docker Compose. The backend service name in Compose is `backend-service` — matching the Kubernetes service name — so nginx.conf works without changes.
@@ -233,26 +252,43 @@ http://localhost:5000
 - **Frontend version** is defined in `frontend/src/app/version.ts` as `FRONTEND_VERSION`
 - **Backend version** is defined in `backend/app.py` as `VERSION`
 - Both are displayed in the footer of the UI — frontend version is baked into the build, backend version is fetched live from `GET /api/version` on page load
-- Bump the relevant constant whenever a change is made, then rebuild and redeploy the image
+- Bump the relevant constant whenever a change is made, then rebuild and redeploy
 
 ---
 
-## Redeployment Steps
+## GitOps Deployment Flow
+
+```
+1. Make code change
+2. Bump version constant (app.py or version.ts)
+3. Build Docker image with version tag
+4. Push image to GCR
+5. Update image tag in k8s_manifests/
+6. git commit + push to GitHub
+7. ArgoCD detects manifest change (polls every 3 min)
+8. ArgoCD triggers rolling deployment automatically
+```
 
 ### After a backend change
 
 ```bash
-docker build -t gcr.io/emerald-water-452417-h1/student-backend:latest ./backend
-docker push gcr.io/emerald-water-452417-h1/student-backend:latest
-kubectl rollout restart deployment/backend -n student-management
+docker build -t gcr.io/emerald-water-452417-h1/student-backend:VERSION ./backend
+docker push gcr.io/emerald-water-452417-h1/student-backend:VERSION
+# Edit k8s_manifests/backend-deployment.yaml — update image tag
+git add k8s_manifests/backend-deployment.yaml
+git commit -m "deploy backend vVERSION"
+git push
 ```
 
 ### After a frontend change
 
 ```bash
-docker build -t gcr.io/emerald-water-452417-h1/student-frontend:latest ./frontend
-docker push gcr.io/emerald-water-452417-h1/student-frontend:latest
-kubectl rollout restart deployment/frontend -n student-management
+docker build -t gcr.io/emerald-water-452417-h1/student-frontend:VERSION ./frontend
+docker push gcr.io/emerald-water-452417-h1/student-frontend:VERSION
+# Edit k8s_manifests/frontend-deployment.yaml — update image tag
+git add k8s_manifests/frontend-deployment.yaml
+git commit -m "deploy frontend vVERSION"
+git push
 ```
 
 ### Check rollout status
