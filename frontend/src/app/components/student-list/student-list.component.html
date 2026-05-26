@@ -1,0 +1,44 @@
+<div class="list-container">
+  <div class="list-header">
+    <h2>Student Records</h2>
+    <button class="btn-load" (click)="loadStudents()" [disabled]="loading">
+      <span *ngIf="!loading">🔄 Load Students</span>
+      <span *ngIf="loading">Loading...</span>
+    </button>
+  </div>
+
+  <div *ngIf="successMessage" class="alert success">{{ successMessage }}</div>
+  <div *ngIf="errorMessage" class="alert error">{{ errorMessage }}</div>
+
+  <div *ngIf="!loaded && !loading" class="empty-state">
+    Click "Load Students" to fetch records from the server.
+  </div>
+
+  <div *ngIf="loaded && students.length === 0 && !errorMessage" class="empty-state">
+    No students found. Add one using the form.
+  </div>
+
+  <table *ngIf="loaded && students.length > 0">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let student of students">
+        <td>{{ student.id }}</td>
+        <td>{{ student.name }}</td>
+        <td>{{ student.email }}</td>
+        <td>{{ student.phone }}</td>
+        <td>
+          <button class="btn-edit" (click)="onEdit(student)">Edit</button>
+          <button class="btn-delete" (click)="onDelete(student.id)">Delete</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

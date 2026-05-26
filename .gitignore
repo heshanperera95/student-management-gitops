@@ -1,0 +1,13 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Python
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+
+# Misc
+*.log
+.env
+test,json

@@ -1,0 +1,8 @@
+<footer>
+  <span>Frontend version: <strong>{{ frontendVersion }}</strong></span>
+  <span class="divider">|</span>
+  <span>
+    Backend version:
+    <strong [class.error]="backendError">{{ backendVersion }}</strong>
+  </span>
+</footer>

@@ -1,0 +1,26 @@
+<header>
+  <div class="header-inner">
+    <span class="logo">🎓</span>
+    <h1>Student Management System</h1>
+  </div>
+</header>
+
+<main>
+  <div class="layout">
+    <section class="form-section">
+      <app-student-form
+        [editingStudent]="editingStudent"
+        (studentSaved)="onStudentSaved(studentList)"
+      ></app-student-form>
+    </section>
+
+    <section class="list-section">
+      <app-student-list
+        #studentList
+        (editStudent)="onEditStudent($event)"
+      ></app-student-list>
+    </section>
+  </div>
+</main>
+
+<app-footer></app-footer>

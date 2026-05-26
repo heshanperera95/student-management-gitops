@@ -1,0 +1,27 @@
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: #666;
+  z-index: 100;
+}
+
+strong {
+  color: #333;
+}
+
+strong.error {
+  color: #e53935;
+}
+
+.divider {
+  color: #ccc;
+}

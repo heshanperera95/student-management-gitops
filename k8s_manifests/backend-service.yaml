@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: student-management
+  labels:
+    app: backend
+spec:
+  type: ClusterIP          # Internal only — frontend proxies to it via nginx
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP

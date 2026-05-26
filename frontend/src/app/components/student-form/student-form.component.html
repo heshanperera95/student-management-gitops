@@ -1,0 +1,66 @@
+<div class="form-container">
+  <h2>{{ isEditing ? 'Edit Student' : 'Add Student' }}</h2>
+
+  <div *ngIf="successMessage" class="alert success">{{ successMessage }}</div>
+  <div *ngIf="errorMessage" class="alert error">{{ errorMessage }}</div>
+
+  <form (ngSubmit)="onSubmit()">
+    <div class="form-group">
+      <label for="id">Student ID</label>
+      <input
+        id="id"
+        type="text"
+        [(ngModel)]="form.id"
+        name="id"
+        placeholder="e.g. S001"
+        [disabled]="isEditing"
+        required
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="name">Full Name</label>
+      <input
+        id="name"
+        type="text"
+        [(ngModel)]="form.name"
+        name="name"
+        placeholder="e.g. John Doe"
+        required
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input
+        id="email"
+        type="email"
+        [(ngModel)]="form.email"
+        name="email"
+        placeholder="e.g. john@example.com"
+        required
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="phone">Phone Number</label>
+      <input
+        id="phone"
+        type="tel"
+        [(ngModel)]="form.phone"
+        name="phone"
+        placeholder="e.g. +94771234567"
+        required
+      />
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">
+        {{ isEditing ? 'Update' : 'Add Student' }}
+      </button>
+      <button *ngIf="isEditing" type="button" class="btn-secondary" (click)="onCancel()">
+        Cancel
+      </button>
+    </div>
+  </form>
+</div>

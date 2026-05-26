@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+
+  # The service name MUST match what nginx.conf resolves: backend-service
+  backend-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: student-backend
+    ports:
+      - "5000:5000"     # Exposed for direct API testing (curl / Postman)
+    networks:
+      - student-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: student-frontend
+    ports:
+      - "8080:80"       # App available at http://localhost:8080
+    depends_on:
+      - backend-service
+    networks:
+      - student-net
+
+networks:
+  student-net:
+    driver: bridge
