@@ -18,14 +18,9 @@
 ## Observability
 
 ### EFK Stack (Elasticsearch + Fluentd + Kibana)
-- [ ] Deploy Elasticsearch on GKE (or use Elastic Cloud)
-- [ ] Deploy Fluentd as a DaemonSet to collect logs from all pods
-- [ ] Configure Fluentd to forward logs to Elasticsearch
-- [ ] Deploy Kibana and expose via NodePort
-- [ ] Create index pattern in Kibana for pod logs
-- [ ] Create dashboards for backend API request logs
-- [ ] Add GCP firewall rule for Kibana NodePort
 - [ ] Add structured JSON logging to Flask backend (replace print statements)
+- [ ] Create dashboards for backend API request logs
+- [ ] Set up index lifecycle management (ILM) to auto-delete logs older than X days
 
 ### Metrics
 - [ ] Deploy Prometheus + Grafana (or use Google Cloud Monitoring)
@@ -101,5 +96,8 @@
 - [x] ArgoCD GitOps setup — auto-deploys on manifest change
 - [x] GitHub repo connected to ArgoCD
 - [x] Versioned Docker image tags (no more :latest)
-- [x] Version footer on frontend (frontend + backend versions)
+- [x] EFK stack — Fluentd DaemonSet on GKE, Elasticsearch 2-node cluster on VMs, Kibana with authentication
+- [x] Elasticsearch secured with TLS transport + username/password authentication
+- [x] GCP firewall rules for internal Elasticsearch and public Kibana access
+- [x] student-management logs visible in Kibana Discover
 - [x] application_summary.md documentation

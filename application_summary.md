@@ -32,6 +32,9 @@ Deployments are managed via GitOps using ArgoCD — any manifest change pushed t
 | Container registry | Google Container Registry (GCR) | gcr.io/emerald-water-452417-h1 |
 | GitOps | ArgoCD | Auto-syncs from GitHub on manifest changes |
 | Source control | GitHub | https://github.com/heshanperera95/student-management-gitops |
+| Log collection | Fluentd | DaemonSet on GKE, ships logs to Elasticsearch |
+| Log storage | Elasticsearch 8.x | 2-node cluster on GCP VMs (server1 + server2) |
+| Log visualization | Kibana 8.x | Hosted on server1, secured with authentication |
 
 ---
 
@@ -230,7 +233,65 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 
 ---
 
-## Local Development
+## EFK Logging Stack
+
+### Architecture
+
+```
+GKE Pods (student-management)
+  │
+  │ container logs (/var/log/containers/*.log)
+  ▼
+Fluentd DaemonSet (kube-system, 1 pod per node)
+  │
+  │ HTTP port 9200 (authenticated)
+  ▼
+Elasticsearch Cluster (efk-cluster)
+  ├── es-node-1 → server1 (10.128.0.61) — data + master
+  └── es-node-2 → server2 (10.128.0.62) — data + master
+  │
+  ▼
+Kibana (server1 — http://34.170.121.101:5601)
+```
+
+### Elasticsearch Cluster
+
+| Field | Value |
+|---|---|
+| Cluster name | `efk-cluster` |
+| Node 1 | `es-node-1` — server1 (10.128.0.61) |
+| Node 2 | `es-node-2` — server2 (10.128.0.62) |
+| HTTP port | 9200 |
+| Transport port | 9300 |
+| Security | Enabled (transport TLS, HTTP plain with auth) |
+| Index pattern | `student-management-YYYY.MM.DD` |
+
+### Kibana
+
+| Field | Value |
+|---|---|
+| URL | http://34.170.121.101:5601 |
+| Username | `elastic` |
+| Data view | `student-management-*` |
+
+### Fluentd
+
+| Field | Value |
+|---|---|
+| Namespace | `kube-system` |
+| Type | DaemonSet (1 pod per node) |
+| Log source | `/var/log/containers/*.log` |
+| Filter | `student-management` namespace only |
+| Elasticsearch user | `fluentd` |
+
+### GCP Firewall Rules
+
+| Rule | Ports | Source |
+|---|---|---|
+| `elasticsearch-internal` | 9200, 9300 | 10.128.0.0/20, 10.44.0.0/14 |
+| `kibana-access` | 5601 | 0.0.0.0/0 (public) |
+
+---
 
 Uses Docker Compose. The backend service name in Compose is `backend-service` — matching the Kubernetes service name — so nginx.conf works without changes.
 
