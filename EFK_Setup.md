@@ -507,18 +507,22 @@ pattern ^student-management$
 ```
 Drops all system namespace logs (kube-system, argocd etc.) to avoid flooding Elasticsearch.
 
-**4. Match — ship to Elasticsearch:**
+**4. Match — ship to Elasticsearch (both nodes for HA failover):**
 ```
 @type elasticsearch
-host 10.128.0.61
-port 9200
+hosts 10.128.0.61:9200,10.128.0.62:9200
 user fluentd
 password Fluentd@2026
 logstash_format true
 logstash_prefix student-management
 logstash_dateformat %Y.%m.%d
+resurrect_after 10s       # retry failed hosts every 10s
+reload_on_failure true    # reload host list on connection failure
+reload_connections false  # don't reload on every request (performance)
 ```
 Creates daily indices named `student-management-2026.05.31` etc.
+
+Both Elasticsearch nodes are listed so Fluentd automatically fails over to server2 if server1 goes down. The `resurrect_after 10s` setting means Fluentd detects the failure within 10 seconds and resumes using both nodes when server1 recovers — no manual intervention needed.
 
 ### DaemonSet (`k8s_manifests/fluentd-daemonset.yaml`)
 
@@ -549,6 +553,20 @@ kubectl logs <fluentd-pod> -n kube-system | grep -i "error\|warn"
 # Check index was created in Elasticsearch
 curl -s -u elastic:PASSWORD "http://localhost:9200/_cat/indices?v" | grep student
 ```
+
+### Fluentd HA Failover Behaviour
+
+With both Elasticsearch nodes listed in `hosts`, Fluentd handles node failures automatically:
+
+| Scenario | What happens |
+|---|---|
+| server1 goes down | Fluentd detects failure, routes all logs to server2 within ~10s |
+| server1 comes back | Fluentd resumes using both nodes automatically |
+| server2 goes down | Fluentd routes all logs to server1 |
+| Both nodes down | Fluentd buffers logs to disk (up to 16MB), retries with exponential backoff |
+| Buffer fills up | New logs are blocked until a node becomes available |
+
+The Elasticsearch cluster itself stays up as long as at least 2 of the 3 nodes (including the tiebreaker) are reachable — the tiebreaker ensures quorum is maintained even with one data node down.
 
 ---
 

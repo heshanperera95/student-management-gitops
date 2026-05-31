@@ -11,3 +11,9 @@ backend/*.pyo
 *.log
 .env
 test,json
+
+# Certificate files — contain private keys, never commit
+*.p12
+*.pem
+*.crt
+*.key
