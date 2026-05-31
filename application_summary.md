@@ -259,12 +259,14 @@ Kibana (server1 — http://34.170.121.101:5601)
 | Field | Value |
 |---|---|
 | Cluster name | `efk-cluster` |
-| Node 1 | `es-node-1` — server1 (10.128.0.61) |
-| Node 2 | `es-node-2` — server2 (10.128.0.62) |
+| Node 1 | `es-node-1` — server1 (10.128.0.61) — master + data |
+| Node 2 | `es-node-2` — server2 (10.128.0.62) — master + data |
+| Node 3 | `es-tiebreaker` — GKE pod (10.44.1.20) — voting-only master |
 | HTTP port | 9200 |
 | Transport port | 9300 |
 | Security | Enabled (transport TLS, HTTP plain with auth) |
 | Index pattern | `student-management-YYYY.MM.DD` |
+| HA | Split-brain protected via 3-node quorum (voting-only tiebreaker) |
 
 ### Kibana
 

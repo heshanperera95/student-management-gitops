@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: es-tiebreaker
+  namespace: student-management
+  labels:
+    app: es-tiebreaker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: es-tiebreaker
+  template:
+    metadata:
+      labels:
+        app: es-tiebreaker
+    spec:
+      initContainers:
+        - name: increase-vm-max-map
+          image: busybox
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.19.16
+          env:
+            - name: node.name
+              value: "es-tiebreaker"
+            - name: cluster.name
+              value: "efk-cluster"
+            - name: node.roles
+              value: "master,voting_only"
+            - name: discovery.seed_hosts
+              value: "10.128.0.61,10.128.0.62"
+            - name: cluster.initial_master_nodes
+              value: "es-node-1,es-node-2,es-tiebreaker"
+            - name: xpack.security.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.verification_mode
+              value: "certificate"
+            - name: xpack.security.transport.ssl.keystore.path
+              value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+            - name: xpack.security.transport.ssl.truststore.path
+              value: "/usr/share/elasticsearch/config/certs/elastic-certificates.p12"
+            - name: xpack.security.http.ssl.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms256m -Xmx256m"
+            - name: ELASTIC_PASSWORD
+              value: "UZqsnVlHNG6vN=_3*x9e"
+          ports:
+            - containerPort: 9200
+              name: http
+            - containerPort: 9300
+              name: transport
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "300m"
+              memory: "768Mi"
+          volumeMounts:
+            - name: certs
+              mountPath: /usr/share/elasticsearch/config/certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: es-tiebreaker-certs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: es-tiebreaker
+  namespace: student-management
+  labels:
+    app: es-tiebreaker
+spec:
+  type: ClusterIP
+  selector:
+    app: es-tiebreaker
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+    - name: transport
+      port: 9300
+      targetPort: 9300
