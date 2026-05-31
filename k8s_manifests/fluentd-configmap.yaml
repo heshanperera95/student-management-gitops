@@ -31,11 +31,10 @@ data:
       </regexp>
     </filter>
 
-    # Send logs to Elasticsearch on server1
+    # Send logs to Elasticsearch — both nodes for HA failover
     <match kubernetes.**>
       @type elasticsearch
-      host 10.128.0.61
-      port 9200
+      hosts 10.128.0.61:9200,10.128.0.62:9200
       user fluentd
       password Fluentd@2026
       logstash_format true
@@ -44,6 +43,9 @@ data:
       include_tag_key true
       tag_key @log_name
       flush_interval 5s
+      resurrect_after 10s
+      reload_on_failure true
+      reload_connections false
       <buffer>
         @type file
         path /var/log/fluentd-buffers/kubernetes.system.buffer
