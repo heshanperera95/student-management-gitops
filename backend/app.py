@@ -1,10 +1,15 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
 CORS(app)
+metrics = PrometheusMetrics(app)
 
-VERSION = "1.2.0"
+# Static app info metric
+metrics.info('student_management_app_info', 'Student Management API', version='1.3.0')
+
+VERSION = "1.3.0"
 
 # In-memory storage (data resets on pod restart — fine for testing)
 students = {}

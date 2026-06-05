@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: student-backend
+  namespace: monitoring           # Must be in the monitoring namespace
+  labels:
+    release: kube-prometheus-stack  # Must match the Prometheus operator's label selector
+spec:
+  namespaceSelector:
+    matchNames:
+      - student-management        # Scrape services in this namespace
+  selector:
+    matchLabels:
+      app: backend                # Matches the backend Service labels
+  endpoints:
+    - port: http                  # Named port on the Service
+      path: /metrics              # Flask metrics endpoint
+      interval: 15s               # Scrape every 15 seconds
