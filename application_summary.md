@@ -13,8 +13,8 @@ Deployments are managed via GitOps using ArgoCD — any manifest change pushed t
 
 | Component | Version |
 |---|---|
-| Frontend | 1.1.0 |
-| Backend | 1.2.0 |
+| Frontend | 1.3.0 |
+| Backend | 1.3.0 |
 
 ---
 
@@ -33,8 +33,10 @@ Deployments are managed via GitOps using ArgoCD — any manifest change pushed t
 | GitOps | ArgoCD | Auto-syncs from GitHub on manifest changes |
 | Source control | GitHub | https://github.com/heshanperera95/student-management-gitops |
 | Log collection | Fluentd | DaemonSet on GKE, ships logs to Elasticsearch |
-| Log storage | Elasticsearch 8.x | 2-node cluster on GCP VMs (server1 + server2) |
+| Log storage | Elasticsearch 8.x | 2-node HA cluster on GCP VMs (server1 + server2) |
 | Log visualization | Kibana 8.x | Hosted on server1, secured with authentication |
+| Metrics collection | Prometheus | kube-prometheus-stack via Helm |
+| Metrics visualization | Grafana | kube-prometheus-stack via Helm |
 
 ---
 
@@ -43,15 +45,14 @@ Deployments are managed via GitOps using ArgoCD — any manifest change pushed t
 ```
 gke cluster/
 ├── backend/
-│   ├── app.py                  ← Flask REST API
+│   ├── app.py                  ← Flask REST API + Prometheus metrics
 │   ├── requirements.txt        ← Python dependencies
 │   ├── Dockerfile              ← Python 3.12-slim + Gunicorn
 │   └── .dockerignore
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── models/
-│   │   │   │   └── student.model.ts
+│   │   │   ├── models/student.model.ts
 │   │   │   ├── services/
 │   │   │   │   ├── student.service.ts
 │   │   │   │   └── version.service.ts
@@ -75,10 +76,17 @@ gke cluster/
 │   ├── namespace.yaml
 │   ├── backend-deployment.yaml
 │   ├── backend-service.yaml
+│   ├── backend-servicemonitor.yaml ← Prometheus scrape config
 │   ├── frontend-deployment.yaml
-│   └── frontend-service.yaml
+│   ├── frontend-service.yaml
+│   ├── fluentd-configmap.yaml
+│   ├── fluentd-daemonset.yaml
+│   └── elasticsearch-tiebreaker.yaml
 ├── docker-compose.yml          ← Local development setup
 ├── argocd-app.yaml             ← ArgoCD Application definition
+├── EFK_Setup.md                ← EFK stack detailed documentation
+├── EFK_Setup_Summary.md        ← EFK stack summary
+├── todo.md                     ← Pending work items
 └── application_summary.md      ← This file
 ```
 
@@ -86,13 +94,14 @@ gke cluster/
 
 ## Backend API
 
-**Base URL (local):** `http://localhost:5000`  
+**Base URL (local):** `http://localhost:5000`
 **Base URL (GKE, internal):** `http://backend-service:5000`
 
 | Method | Endpoint | Description | Request Body | Response |
 |---|---|---|---|---|
 | GET | `/health` | Health check | — | `{"status": "healthy"}` |
-| GET | `/version` | Backend version | — | `{"version": "1.2.0"}` |
+| GET | `/version` | Backend version | — | `{"version": "1.3.0"}` |
+| GET | `/metrics` | Prometheus metrics | — | Prometheus text format |
 | GET | `/students` | Get all students | — | Array of student objects |
 | GET | `/students/:id` | Get one student | — | Student object or 404 |
 | POST | `/students` | Create a student | `{id, name, email, phone}` | Created student or 400/409 |
@@ -109,14 +118,6 @@ gke cluster/
   "phone": "+94771234567"
 }
 ```
-
-### Error Responses
-
-| Status | Meaning |
-|---|---|
-| 400 | Missing required fields |
-| 404 | Student not found |
-| 409 | Student ID already exists |
 
 ---
 
@@ -137,18 +138,6 @@ backend-service (Kubernetes ClusterIP Service, port 5000)
 backend Pod (Flask/Gunicorn, port 5000)
 ```
 
-The frontend uses **relative URLs** (`/api/students`) — nginx handles routing to the backend. This means the same frontend image works identically in local Docker and in GKE without any code changes.
-
-### nginx Proxy Config
-
-```nginx
-location /api/ {
-    proxy_pass http://backend-service:5000/;
-}
-```
-
-The service name `backend-service` resolves via Kubernetes DNS inside the cluster, and via Docker Compose network aliases locally.
-
 ---
 
 ## Kubernetes Resources
@@ -164,13 +153,14 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 | Field | Value |
 |---|---|
 | Name | `backend` |
-| Image | `gcr.io/emerald-water-452417-h1/student-backend:1.2.0` |
+| Image | `gcr.io/emerald-water-452417-h1/student-backend:1.3.0` |
 | Replicas | 1 |
 | Container port | 5000 |
 | CPU request/limit | 100m / 300m |
 | Memory request/limit | 128Mi / 256Mi |
 | Liveness probe | `GET /health` every 15s |
 | Readiness probe | `GET /health` every 10s |
+| Metrics | `GET /metrics` — scraped by Prometheus every 15s |
 
 ### Backend Service
 
@@ -178,29 +168,27 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 |---|---|
 | Name | `backend-service` |
 | Type | `ClusterIP` (internal only) |
-| Port | 5000 |
+| Port | 5000 (named: `http`) |
 
 ### Frontend Deployment
 
 | Field | Value |
 |---|---|
 | Name | `frontend` |
-| Image | `gcr.io/emerald-water-452417-h1/student-frontend:latest` |
+| Image | `gcr.io/emerald-water-452417-h1/student-frontend:1.3.0` |
 | Replicas | 2 |
 | Container port | 80 |
 | CPU request/limit | 50m / 200m |
 | Memory request/limit | 64Mi / 128Mi |
-| Liveness probe | `GET /` every 20s |
-| Readiness probe | `GET /` every 10s |
 
 ### Frontend Service
 
 | Field | Value |
 |---|---|
 | Name | `frontend-service` |
-| Type | `LoadBalancer` (public) |
+| Type | `LoadBalancer` (public, stable IP) |
 | Port | 80 |
-| External IP | 35.255.191.121 |
+| External IP | **35.255.191.121** |
 
 ---
 
@@ -213,8 +201,25 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 | Region / Zone | `us-central1-a` |
 | Node pool | `standard-pool` |
 | Nodes | 2 x `e2-custom-4-8192` (4 vCPU, 8GB RAM each) |
+| Kubernetes version | v1.35.5-gke.1000000 |
 | Kubernetes context | `gke_emerald-water-452417-h1_us-central1-a_my-gke-cluster` |
 | Container Registry | `gcr.io/emerald-water-452417-h1` |
+| Node 1 external IP | 34.72.169.238 |
+| Node 2 external IP | 34.134.166.234 |
+
+> **Note:** Node external IPs change when GKE auto-upgrades the cluster (nodes are replaced). LoadBalancer IPs are stable. NodePort services must use updated node IPs after an upgrade.
+
+---
+
+## Access URLs
+
+| Service | URL | Notes |
+|---|---|---|
+| Student App | `http://35.255.191.121` | Stable LoadBalancer IP |
+| ArgoCD | `https://34.72.169.238:31762` | NodePort — IP changes on node upgrade |
+| Grafana | `http://34.72.169.238:32000` | NodePort — IP changes on node upgrade |
+| Prometheus | `http://34.72.169.238:32001` | NodePort — IP changes on node upgrade |
+| Kibana | `http://34.170.121.101:5601` | VM static IP — stable |
 
 ---
 
@@ -223,7 +228,8 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 | Field | Value |
 |---|---|
 | Namespace | `argocd` |
-| UI Access | `https://34.27.178.30:31762` or `https://35.193.78.229:31762` |
+| Version | v3.4.2 |
+| UI Access | `https://34.72.169.238:31762` |
 | Username | `admin` |
 | Application name | `student-management` |
 | Watched repo | `https://github.com/heshanperera95/student-management-gitops.git` |
@@ -235,67 +241,32 @@ The service name `backend-service` resolves via Kubernetes DNS inside the cluste
 
 ## EFK Logging Stack
 
-### Architecture
-
-```
-GKE Pods (student-management)
-  │
-  │ container logs (/var/log/containers/*.log)
-  ▼
-Fluentd DaemonSet (kube-system, 1 pod per node)
-  │
-  │ HTTP port 9200 (authenticated)
-  ▼
-Elasticsearch Cluster (efk-cluster)
-  ├── es-node-1 → server1 (10.128.0.61) — data + master
-  └── es-node-2 → server2 (10.128.0.62) — data + master
-  │
-  ▼
-Kibana (server1 — http://34.170.121.101:5601)
-```
-
-### Elasticsearch Cluster
-
 | Field | Value |
 |---|---|
-| Cluster name | `efk-cluster` |
-| Node 1 | `es-node-1` — server1 (10.128.0.61) — master + data |
-| Node 2 | `es-node-2` — server2 (10.128.0.62) — master + data |
-| Node 3 | `es-tiebreaker` — GKE pod (10.44.1.20) — voting-only master |
-| HTTP port | 9200 |
-| Transport port | 9300 |
-| Security | Enabled (transport TLS, HTTP plain with auth) |
-| Index pattern | `student-management-YYYY.MM.DD` |
-| HA | Split-brain protected via 3-node quorum (voting-only tiebreaker) |
-
-### Kibana
-
-| Field | Value |
-|---|---|
-| URL | http://34.170.121.101:5601 |
-| Username | `elastic` |
-| Data view | `student-management-*` |
-
-### Fluentd
-
-| Field | Value |
-|---|---|
-| Namespace | `kube-system` |
-| Type | DaemonSet (1 pod per node) |
-| Log source | `/var/log/containers/*.log` |
-| Filter | `student-management` namespace only |
-| Elasticsearch user | `fluentd` |
-
-### GCP Firewall Rules
-
-| Rule | Ports | Source |
-|---|---|---|
-| `elasticsearch-internal` | 9200, 9300 | 10.128.0.0/20, 10.44.0.0/14 |
-| `kibana-access` | 5601 | 0.0.0.0/0 (public) |
+| Elasticsearch | 3-node HA cluster — es-node-1 (server1), es-node-2 (server2), es-tiebreaker (GKE pod) |
+| Kibana | `http://34.170.121.101:5601` — username: `elastic` |
+| Fluentd | DaemonSet in kube-system, ships to both ES nodes |
+| Log index | `student-management-YYYY.MM.DD` |
+| Full docs | See `EFK_Setup.md` and `EFK_Setup_Summary.md` |
 
 ---
 
-Uses Docker Compose. The backend service name in Compose is `backend-service` — matching the Kubernetes service name — so nginx.conf works without changes.
+## Prometheus / Grafana
+
+| Field | Value |
+|---|---|
+| Install method | Helm — `kube-prometheus-stack` chart |
+| Namespace | `monitoring` |
+| Prometheus UI | `http://34.72.169.238:32001` |
+| Grafana UI | `http://34.72.169.238:32000` |
+| Grafana username | `admin` |
+| Scrape target | `student-management` namespace via ServiceMonitor |
+| Scrape interval | 15s |
+| Backend metrics | `GET /metrics` — request rate, latency, error rate |
+
+---
+
+## Local Development
 
 ```bash
 # Start both containers
@@ -312,10 +283,10 @@ http://localhost:5000
 
 ## Versioning
 
-- **Frontend version** is defined in `frontend/src/app/version.ts` as `FRONTEND_VERSION`
-- **Backend version** is defined in `backend/app.py` as `VERSION`
-- Both are displayed in the footer of the UI — frontend version is baked into the build, backend version is fetched live from `GET /api/version` on page load
-- Bump the relevant constant whenever a change is made, then rebuild and redeploy
+- **Frontend version** — `frontend/src/app/version.ts` → `FRONTEND_VERSION`
+- **Backend version** — `backend/app.py` → `VERSION`
+- Both displayed in the footer — frontend baked at build time, backend fetched live from `GET /api/version`
+- Bump the constant, rebuild image, update manifest tag, push to GitHub → ArgoCD deploys
 
 ---
 
@@ -323,13 +294,12 @@ http://localhost:5000
 
 ```
 1. Make code change
-2. Bump version constant (app.py or version.ts)
-3. Build Docker image with version tag
-4. Push image to GCR
+2. Bump version constant
+3. docker build -t gcr.io/emerald-water-452417-h1/IMAGE:VERSION ./SERVICE
+4. docker push gcr.io/emerald-water-452417-h1/IMAGE:VERSION
 5. Update image tag in k8s_manifests/
 6. git commit + push to GitHub
-7. ArgoCD detects manifest change (polls every 3 min)
-8. ArgoCD triggers rolling deployment automatically
+7. ArgoCD detects change → rolling deploy (no kubectl needed)
 ```
 
 ### After a backend change
@@ -354,9 +324,10 @@ git commit -m "deploy frontend vVERSION"
 git push
 ```
 
-### Check rollout status
+### After GKE node upgrade (node IPs change)
 
+NodePort service URLs must be updated. Get new node IPs:
 ```bash
-kubectl rollout status deployment/backend -n student-management
-kubectl rollout status deployment/frontend -n student-management
+kubectl get nodes -o wide
 ```
+Update ArgoCD, Grafana, and Prometheus URLs using the new external IPs with the same NodePorts (31762, 32000, 32001).

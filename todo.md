@@ -23,8 +23,6 @@
 - [ ] Set up index lifecycle management (ILM) to auto-delete logs older than X days
 
 ### Metrics
-- [ ] Deploy Prometheus + Grafana (or use Google Cloud Monitoring)
-- [ ] Add `/metrics` endpoint to Flask backend using `prometheus-flask-exporter`
 - [ ] Create Grafana dashboard for API request rate, latency, error rate
 - [ ] Set up alerts for pod restarts and high error rates
 
@@ -100,4 +98,8 @@
 - [x] Elasticsearch secured with TLS transport + username/password authentication
 - [x] GCP firewall rules for internal Elasticsearch and public Kibana access
 - [x] student-management logs visible in Kibana Discover
+- [x] Prometheus + Grafana installed via kube-prometheus-stack Helm chart
+- [x] Flask backend exposes /metrics endpoint via prometheus-flask-exporter
+- [x] Prometheus ServiceMonitor scraping student-management backend
+- [x] Grafana accessible via NodePort 32000
 - [x] application_summary.md documentation
